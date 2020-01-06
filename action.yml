@@ -1,10 +1,26 @@
-name: 'Your name here'
-description: 'Provide a description here'
-author: 'Your name or organization here'
+name: 'update-issues-with-azure-devops-tracking-blocks'
+description: 'Updates issues with `azure-devops-tracking` blocks'
+author: 'hashtagchris'
 inputs:
-  myInput:              # change this
-    description: 'input description here'
-    default: 'default value if applicable'
+  issuesToken:
+    description: 'The token used to update issues. secrets.GITHUB_TOKEN works well.'
+  azureDevOpsOrgUrl:
+    description: 'The Azure DevOps org url. e.g. https://dev.azure.com/myOrg'
+  azureDevOpsToken:
+    description: 'Personal Access Token with Code:read and Release:read scopes.'
+  azureDevOpsProjectName:
+    description: 'The Azure DevOps project name'
+  azureDevOpsReleaseDefinitionId:
+    description: 'The definitionId for the Release that deploys tracked PRs.'
+  azureDevOpsReleaseEnvironmentsToIgnore:
+    description: 'Comma separated list of release environments to ignore'
+  projectToken:
+    description: 'The token used to update project cards.'
+  projectUrl:
+    description: 'The project board url.'
+  projectColumnNameForCompletedPRs:
+    description: 'The project column to move issues with completed PRs to.'
+
 runs:
   using: 'node12'
   main: 'dist/index.js'
