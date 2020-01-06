@@ -83,7 +83,7 @@ async function run() {
       core.debug(`New labels for issue ${issue.number}: ${newLabels}`);
 
       if (newLabels.length) {
-        core.info(`Adding labels (${JSON.stringify(newLabels)}) to issue ${issue.number}...`);
+        core.info(`[issue ${issue.number}] Adding labels (${JSON.stringify(newLabels)})...`);
         const addLabelsResponse = await octokit.issues.addLabels({
           ...context.repo,
           issue_number: issue.number,
@@ -105,7 +105,7 @@ async function run() {
       core.debug(`Close issue ${issue.number}: ${closeIssue}`);
 
       if (closeIssue) {
-        core.info(`Issue ${issue.number} fully deployed. Closing...`);
+        core.info(`[issue ${issue.number}] PR changes deployed to all environments. Closing issue...`);
 
         const issueUpdateResponse = await octokit.issues.update({
           ...context.repo,
@@ -160,7 +160,7 @@ async function run() {
             }
 
             if (card.column.id !== targetColumn.id) {
-              core.info(`Moving card for issue ${issue.number} from '${card.column.name}' column to '${targetColumn.name}' column...`);
+              core.info(`[issue ${issue.number}] Moving project card from '${card.column.name}' column to '${targetColumn.name}' column...`);
 
               const mutationResult = await projectOctokit.graphql(`
                 mutation($moveInput: MoveProjectCardInput!) {
