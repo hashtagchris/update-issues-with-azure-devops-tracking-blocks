@@ -5915,7 +5915,7 @@ function run() {
                 const newLabels = labels.filter(v => !issue.labels.find(l => l.name === v));
                 core.debug(`New labels for issue ${issue.number}: ${newLabels}`);
                 if (newLabels.length) {
-                    core.info(`Adding labels (${JSON.stringify(newLabels)}) to issue ${issue.number}...`);
+                    core.info(`[issue ${issue.number}] Adding labels (${JSON.stringify(newLabels)})...`);
                     const addLabelsResponse = yield octokit.issues.addLabels(Object.assign(Object.assign({}, context.repo), { issue_number: issue.number, labels: newLabels }));
                     core.debug(JSON.stringify(addLabelsResponse));
                 }
@@ -5929,7 +5929,7 @@ function run() {
                 let closeIssue = deployInfos.every(info => info.deployedToAllEnvironments);
                 core.debug(`Close issue ${issue.number}: ${closeIssue}`);
                 if (closeIssue) {
-                    core.info(`Issue ${issue.number} fully deployed. Closing...`);
+                    core.info(`[issue ${issue.number}] PR changes deployed to all environments. Closing issue...`);
                     const issueUpdateResponse = yield octokit.issues.update(Object.assign(Object.assign({}, context.repo), { issue_number: issue.number, state: "closed" }));
                     core.debug(JSON.stringify(issueUpdateResponse));
                 }
@@ -5971,7 +5971,7 @@ function run() {
                                 throw new Error(`${card.project.url} doesn't include a column named ${targetColumnName}`);
                             }
                             if (card.column.id !== targetColumn.id) {
-                                core.info(`Moving card for issue ${issue.number} from '${card.column.name}' column to '${targetColumn.name}' column...`);
+                                core.info(`[issue ${issue.number}] Moving project card from '${card.column.name}' column to '${targetColumn.name}' column...`);
                                 const mutationResult = yield projectOctokit.graphql(`
                 mutation($moveInput: MoveProjectCardInput!) {
                   moveProjectCard(input: $moveInput) {
