@@ -23,7 +23,7 @@ https://dev.azure.com/myOrg/myProject/_git/myProject/pullrequest/526
 name: "Azure DevOps tracking"
 on:
   schedule:
-    - cron: "0 * * * * *"
+    - cron: "0 * * * *"
 
 jobs:
   build:
