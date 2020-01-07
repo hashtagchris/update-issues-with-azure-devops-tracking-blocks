@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { tryExtractTrackingInfo } from './aztrack';
+import { projectCardsQuery, projectCardsGraphqlResult } from './graphql-queries';
 
 import { PullRequestTracker } from '@hashtagchris/azure-devops-pull-request-tracking';
 import { PullRequestStatus } from 'azure-devops-node-api/interfaces/GitInterfaces';
@@ -117,40 +118,19 @@ async function run() {
       }
       else {
         // Check if we need to move the project card to a different column.
-        const projectCardsQuery = await projectOctokit.graphql(`
-          query projectCards($owner: String!, $repo: String!, $issueNumber: Int!) {
-            repository(owner: $owner, name: $repo) {
-              issue(number: $issueNumber) {
-                title
-                projectCards(first: 100) {
-                  nodes {
-                    id
-                    column {
-                      name
-                      id
-                    }
-                    project {
-                      url
-                      columns(first: 100) {
-                        nodes {
-                          name
-                          id
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `, {
+        const projectCardsQueryResponse = await projectOctokit.graphql(projectCardsQuery, {
           ...context.repo,
           issueNumber: issue.number,
         });
 
-        core.debug(JSON.stringify(projectCardsQuery));
+        // TODO: Check errors collection? When does projectOctokit.graphql throw?
 
-        for (const card of projectCardsQuery.repository.issue.projectCards.nodes) {
+        // We know the shape of the graphql response.
+        const projectCardsQueryResult = projectCardsQueryResponse as projectCardsGraphqlResult;
+
+        core.debug(JSON.stringify(projectCardsQueryResult));
+
+        for (const card of projectCardsQueryResult.repository.issue.projectCards.nodes) {
           if (card.project.url === core.getInput('projectUrl')) {
             const targetColumnName = core.getInput('projectColumnNameForCompletedPRs').toLowerCase();
 
