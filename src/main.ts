@@ -5,6 +5,7 @@ import { projectCardsQuery, projectCardsGraphqlResult } from './graphql-queries'
 
 import { PullRequestTracker } from '@hashtagchris/azure-devops-pull-request-tracking';
 import { PullRequestStatus } from 'azure-devops-node-api/interfaces/GitInterfaces';
+import { IssuesListForRepoResponseItem } from '@octokit/rest';
 
 async function run() {
   try {
@@ -30,46 +31,51 @@ async function run() {
     core.info(`PR environments: ${prEnvironments}`);
 
     core.debug(`Querying issues...`);
-
-    // TODO: Retrieve multiple pages of issues?
-    const openIssues = await octokit.issues.listForRepo({
+    const endpointOptions = await octokit.issues.listForRepo({
       ...context.repo,
       state: "open",
     });
+    const openIssues: IssuesListForRepoResponseItem[] = await octokit.paginate(endpointOptions);
 
-    core.debug(`Status: ${openIssues.status}`);
-    core.debug(`Issues found: ${openIssues.data.length}`);
-
-    for (const issuePair of openIssues.data.entries()) {
-      const issue = issuePair[1];
-      core.debug(`Inspecting #${issue.number}: ${issue.title}...`);
+    let azTrackingIssuesCount = 0;
+    let updatedIssuesCount = 0;
+    core.info(`Inspecting ${openIssues.length} issue(s)...`);
+    for (const issue of openIssues) {
+      let issueUpdated = false;
+      core.debug(`[issue ${issue.number}] Inspecting issue. Title: ${issue.title}`);
 
       if (issue.pull_request) {
-        core.debug("Skipping pull request.");
+        core.debug(`[issue ${issue.number}] Skipping pull request.`);
         continue;
       }
 
       core.debug(`Body: ${issue.body}`);
+      if (!issue.body) {
+        core.debug(`[issue ${issue.number}] No issue body. Skipping issue...`);
+        continue;
+      }
       // Log the body in base64 to find unprintable characters and crlf.
-      core.debug(`Body (base64): ${Buffer.from(issue.body).toString('base64')}`);
+      // core.debug(`Body (base64): ${Buffer.from(issue.body).toString('base64')}`);
 
       const azTrack = tryExtractTrackingInfo(issue.body);
       if (!azTrack) {
-        core.debug(`No tracking information found. Skipping issue ${issue.number}.`);
+        core.debug(`[issue ${issue.number}] No tracking information found. Skipping issue...`);
         continue;
       }
 
-      core.debug(`Getting Azure DevOps deployInfos for issue ${issue.number}...`);
+      azTrackingIssuesCount++;
+
+      core.debug(`[issue ${issue.number}] Getting Azure DevOps deployInfos...`);
       const deployInfos = await prTracker.getDeployInfos(azTrack.pullRequests);
       core.debug(JSON.stringify(deployInfos));
 
       const unmergedPR = deployInfos.find(info => info.pullRequest.status !== PullRequestStatus.Completed);
       if (unmergedPR) {
-        core.debug(`PR ${unmergedPR.pullRequest.id}'s status is ${unmergedPR.pullRequest.status}, not 3 ('Completed'). Skipping...`);
+        core.debug(`[issue ${issue.number}] PR ${unmergedPR.pullRequest.id}'s status is ${unmergedPR.pullRequest.status}, not 3 ('Completed'). Skipping...`);
         continue;
       }
 
-      core.debug(`Building deploy labels for issue ${issue.number}...`);
+      core.debug(`[issue ${issue.number}] Building deploy labels for issue...`);
       const labels = deployInfos
                       .map(info => Object.keys(info.deployedEnvironments!))
                       // intersection: only keep environments all PRs are deployed to.
@@ -91,6 +97,7 @@ async function run() {
           labels: newLabels,
         });
         core.debug(JSON.stringify(addLabelsResponse));
+        issueUpdated = true;
       }
       else {
         core.debug(`No new labels to add.`);
@@ -98,6 +105,9 @@ async function run() {
 
       if (azTrack.labelsOnly) {
         core.debug(`labels-only set. Done processing issue ${issue.number}`);
+        if (issueUpdated) {
+          updatedIssuesCount++;
+        }
         continue;
       }
 
@@ -111,9 +121,10 @@ async function run() {
         const issueUpdateResponse = await octokit.issues.update({
           ...context.repo,
           issue_number: issue.number,
-          state: "closed"
+          state: "closed",
         });
 
+        updatedIssuesCount++;
         core.debug(JSON.stringify(issueUpdateResponse));
       }
       else {
@@ -162,6 +173,9 @@ async function run() {
         }
       }
     }
+
+    core.info(`Issues with tracking blocks: ${azTrackingIssuesCount}`);
+    core.info(`Issues updated: ${updatedIssuesCount}`);
   }
   catch (error) {
     core.debug("Caught error");
