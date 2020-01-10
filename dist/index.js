@@ -6203,34 +6203,40 @@ function run() {
             const prEnvironments = yield prTracker.getEnvironmentNames();
             core.info(`PR environments: ${prEnvironments}`);
             core.debug(`Querying issues...`);
-            // TODO: Retrieve multiple pages of issues?
-            const openIssues = yield octokit.issues.listForRepo(Object.assign(Object.assign({}, context.repo), { state: "open" }));
-            core.debug(`Status: ${openIssues.status}`);
-            core.debug(`Issues found: ${openIssues.data.length}`);
-            for (const issuePair of openIssues.data.entries()) {
-                const issue = issuePair[1];
-                core.debug(`Inspecting #${issue.number}: ${issue.title}...`);
+            const endpointOptions = yield octokit.issues.listForRepo(Object.assign(Object.assign({}, context.repo), { state: "open" }));
+            const openIssues = yield octokit.paginate(endpointOptions);
+            let azTrackingIssuesCount = 0;
+            let updatedIssuesCount = 0;
+            core.info(`Inspecting ${openIssues.length} issue(s)...`);
+            for (const issue of openIssues) {
+                let issueUpdated = false;
+                core.debug(`[issue ${issue.number}] Inspecting issue. Title: ${issue.title}`);
                 if (issue.pull_request) {
-                    core.debug("Skipping pull request.");
+                    core.debug(`[issue ${issue.number}] Skipping pull request.`);
                     continue;
                 }
                 core.debug(`Body: ${issue.body}`);
-                // Log the body in base64 to find unprintable characters and crlf.
-                core.debug(`Body (base64): ${Buffer.from(issue.body).toString('base64')}`);
-                const azTrack = aztrack_1.tryExtractTrackingInfo(issue.body);
-                if (!azTrack) {
-                    core.debug(`No tracking information found. Skipping issue ${issue.number}.`);
+                if (!issue.body) {
+                    core.debug(`[issue ${issue.number}] No issue body. Skipping issue...`);
                     continue;
                 }
-                core.debug(`Getting Azure DevOps deployInfos for issue ${issue.number}...`);
+                // Log the body in base64 to find unprintable characters and crlf.
+                // core.debug(`Body (base64): ${Buffer.from(issue.body).toString('base64')}`);
+                const azTrack = aztrack_1.tryExtractTrackingInfo(issue.body);
+                if (!azTrack) {
+                    core.debug(`[issue ${issue.number}] No tracking information found. Skipping issue...`);
+                    continue;
+                }
+                azTrackingIssuesCount++;
+                core.debug(`[issue ${issue.number}] Getting Azure DevOps deployInfos...`);
                 const deployInfos = yield prTracker.getDeployInfos(azTrack.pullRequests);
                 core.debug(JSON.stringify(deployInfos));
                 const unmergedPR = deployInfos.find(info => info.pullRequest.status !== GitInterfaces_1.PullRequestStatus.Completed);
                 if (unmergedPR) {
-                    core.debug(`PR ${unmergedPR.pullRequest.id}'s status is ${unmergedPR.pullRequest.status}, not 3 ('Completed'). Skipping...`);
+                    core.debug(`[issue ${issue.number}] PR ${unmergedPR.pullRequest.id}'s status is ${unmergedPR.pullRequest.status}, not 3 ('Completed'). Skipping...`);
                     continue;
                 }
-                core.debug(`Building deploy labels for issue ${issue.number}...`);
+                core.debug(`[issue ${issue.number}] Building deploy labels for issue...`);
                 const labels = deployInfos
                     .map(info => Object.keys(info.deployedEnvironments))
                     // intersection: only keep environments all PRs are deployed to.
@@ -6245,12 +6251,16 @@ function run() {
                     core.info(`[issue ${issue.number}] Adding labels (${JSON.stringify(newLabels)})...`);
                     const addLabelsResponse = yield octokit.issues.addLabels(Object.assign(Object.assign({}, context.repo), { issue_number: issue.number, labels: newLabels }));
                     core.debug(JSON.stringify(addLabelsResponse));
+                    issueUpdated = true;
                 }
                 else {
                     core.debug(`No new labels to add.`);
                 }
                 if (azTrack.labelsOnly) {
                     core.debug(`labels-only set. Done processing issue ${issue.number}`);
+                    if (issueUpdated) {
+                        updatedIssuesCount++;
+                    }
                     continue;
                 }
                 let closeIssue = deployInfos.every(info => info.deployedToAllEnvironments);
@@ -6258,6 +6268,7 @@ function run() {
                 if (closeIssue) {
                     core.info(`[issue ${issue.number}] PR changes deployed to all environments. Closing issue...`);
                     const issueUpdateResponse = yield octokit.issues.update(Object.assign(Object.assign({}, context.repo), { issue_number: issue.number, state: "closed" }));
+                    updatedIssuesCount++;
                     core.debug(JSON.stringify(issueUpdateResponse));
                 }
                 else {
@@ -6295,6 +6306,8 @@ function run() {
                     }
                 }
             }
+            core.info(`Issues with tracking blocks: ${azTrackingIssuesCount}`);
+            core.info(`Issues updated: ${updatedIssuesCount}`);
         }
         catch (error) {
             core.debug("Caught error");
