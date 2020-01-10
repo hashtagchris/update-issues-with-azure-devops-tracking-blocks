@@ -167,6 +167,7 @@ async function run() {
                 }
               });
 
+              updatedIssuesCount++;
               core.debug(JSON.stringify(mutationResult));
             }
           }
